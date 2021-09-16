@@ -96,7 +96,7 @@ def BuildRegex(devide, filename):
         l = file.readline()
     return Regex, Cregex
 
-def Banwords(regex, cregex, filename):
+def BanWords(regex, cregex, filename):
     file = open(filename, encoding="utf-8")
     l = file.readline()
     lcount = 1
@@ -131,12 +131,18 @@ def Banwords(regex, cregex, filename):
         lcount += 1
     return ans
 
-def test(words, org):
+def test_BuildRegex(devide,filename):
+    test_regex, test_cregex = BuildRegex(devide, filename)
+    print(test_regex)
+    print(test_cregex)
+
+
+def test_All(words, org):
     wordsname = words
     orgname = org
-    devide = initChai()
+    devide = myChai()
     regex, cregex = BuildRegex(devide, wordsname)
-    anslist = Banwords(regex, cregex, orgname)
+    anslist = BanWords(regex, cregex, orgname)
     return anslist
 
 if __name__ == '__main__':
@@ -154,7 +160,7 @@ if __name__ == '__main__':
         exit(0)
     devide = myChai()
     regex, cregex = BuildRegex(devide, wordsname)
-    anslist = Banwords(regex, cregex, orgname)
+    anslist = BanWords(regex, cregex, orgname)
     anslist.sort(key=lambda x: (x[0], x[3]))  # x[0]x[3]分别为行号和匹配时在行中的位置
     with open(ansname, "w+", encoding="utf-8") as a:
         a.write("Total: {}\n".format(len(anslist)))
