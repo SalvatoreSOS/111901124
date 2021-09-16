@@ -1,4 +1,3 @@
-import profile
 import time
 import sys
 import re
@@ -78,9 +77,9 @@ def BuildRegex(devide, filename):
                     fstr += "[^\\u4e00-\\u9fa5]*"  # 正则表达式中加入非中文字符，下同
                     cstr += "[^\\u4e00-\\u9fa5]*"
                 py = Cpy(word)
-                fstr += "(?:{}|{}|{})".format(word, py[0], py[0][0],)  # 加入存在的情况
+                fstr += "(?:{}|{}|{})".format(word, py[0], py[0][0], )  # 加入存在的情况
                 if devide.tree[word].first.name != "" and devide.tree[word].second.name != "":
-                    cstr += "(?:{}{})".format(devide.tree[word].first.name[0], devide.tree[word].second.name[0],)  # 单独拆字
+                    cstr += "(?:{}{})".format(devide.tree[word].first.name[0], devide.tree[word].second.name[0])  # 单独拆字
             else:  # 中文且不可拆
                 if predicate:
                     predicate = False
@@ -168,6 +167,3 @@ if __name__ == '__main__':
             a.write("Line{}: <{}> {}\n".format(i[0], i[1], i[2]))
     endtime = time.time()
     print(endtime - starttime)
-    #print("Total: {}".format(len(anslist)))
-    #for i in anslist:
-    #    print("Line{}: <{}> {}".format(i[0], i[1], i[2]))
