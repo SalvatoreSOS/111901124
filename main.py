@@ -1,10 +1,11 @@
-from datetime import datetime
-from pychai import Schema
+import profile
+import time
 import sys
 import re
-from pypinyin import lazy_pinyin as lp
+from pychai import Schema
+from pypinyin import lazy_pinyin as Cpy
 
-def initChai():
+def myChai():
     wubi98 = Schema('wubi98')
     wubi98.run()
     for nameChar in wubi98.charList:
@@ -52,106 +53,115 @@ def initChai():
         wubi98.encoder[nameChar] = code
     return wubi98
 
-def createRegex(chai, fileName):
-    finalRegex = dict()
-    file = open(fileName, encoding="utf-8")
-    line = file.readline()
-    while line != "":
-        forbidden = ""
-        first = True
-        for word in line:
+def BuildRegex(devide, filename):
+    Regex = dict()
+    Cregex = dict()
+    file = open(filename, encoding="utf-8")
+    l = file.readline()
+    while l:
+        fstr = ""  #重置为空
+        cstr = ""
+        predicate = True
+        for word in l:
             if word == '\n' or word.isdigit():
                 break
             elif 'a' <= word <= 'z' or 'A' <= word <= 'Z':
-                if first:
-                    first = False
+                if predicate:
+                    predicate = False
                 else:
-                    forbidden += "[^A-Za-z]*"
-                forbidden += "(?:" + word + ")"
-            elif word in chai.tree.keys():
-                if first:
-                    first = False
+                    fstr += "[^A-Za-z]*"  # 若敏感词为英文单词，词中可能含有其他字符，据此构造正则表达式
+                fstr += "(?:" + word + ")"
+            elif word in devide.tree.keys():  # 中文且可拆分
+                if predicate:
+                    predicate = False
                 else:
-                    forbidden += "[^\\u4e00-\\u9fa5]*"
-                pinyin = lp(word)
-                forbidden += "(?:{}{}|{}|{}|{})".format(
-                    chai.tree[word].first.name[0], chai.tree[word].second.name[0],
-                    pinyin[0], pinyin[0][0], word)
-            else:
-                if first:
-                    first = False
+                    fstr += "[^\\u4e00-\\u9fa5]*"  # 正则表达式中加入非中文字符，下同
+                    cstr += "[^\\u4e00-\\u9fa5]*"
+                py = Cpy(word)
+                fstr += "(?:{}|{}|{})".format(word, py[0], py[0][0],)  # 加入存在的情况
+                if devide.tree[word].first.name != "" and devide.tree[word].second.name != "":
+                    cstr += "(?:{}{})".format(devide.tree[word].first.name[0], devide.tree[word].second.name[0],)  # 单独拆字
+            else:  # 中文且不可拆
+                if predicate:
+                    predicate = False
                 else:
-                    forbidden += "[^\\u4e00-\\u9fa5]*"
-                pinyin = lp(word)
-                forbidden += "(?:{}|{}|{})".format(pinyin[0], pinyin[0][0], word)
-        finalRegex[line.strip()] = forbidden
-        line = file.readline()
-    return finalRegex
+                    fstr += "[^\\u4e00-\\u9fa5]*"
+                    cstr += "[^\\u4e00-\\u9fa5]*"
+                py = Cpy(word)
+                fstr += "(?:{}|{}|{})".format(word, py[0], py[0][0],)
+                cstr += "(?:{})".format(word,)
+        Regex[l.strip()] = fstr
+        if not ('a' <= l[0] <= 'z' or 'A' <= l[0] <= 'Z'):  # 若为英文不需要拆字的正则表达式
+            Cregex[l.strip()] = cstr
+        l = file.readline()
+    return Regex, Cregex
 
-def matchForbidden(regex, fileName):
-    file = open(fileName, encoding="utf-8")
-    line = file.readline()
-    cnt = 1
-    total = 0
-    ansList = list()
-    while line:
-        line = line.strip()
-        cw = dict()
+def Banwords(regex, cregex, filename):
+    file = open(filename, encoding="utf-8")
+    l = file.readline()
+    lcount = 1
+    ans = list()
+    while l:
+        l = l.strip()
+        pychange = dict()
+        for key in cregex.keys():
+            bword1 = re.finditer(cregex[key], l, re.I)  # 第一遍单独匹配拆字正则
+            for i in bword1:
+                span = i.span()
+                ans.append([lcount, key, i.group(), span[0]])
+                l = l[:span[0]] + l[span[1]:]  # 删去已匹配敏感词
         for key in regex.keys():
-            for i in range(len(line)):
-                curPinyin = lp(line[i])[0]
-                keyPinyin = lp(key)
-                if curPinyin in keyPinyin:
-                    fb = key[keyPinyin.index(curPinyin)]
-                    cw[i] = [line[i], fb]
-                    if 0 < i < len(line) - 1:
-                        line = line[:i] + fb + line[i + 1:]
-                    elif i == 0:
-                        line = fb + line[i + 1:]
-                    elif i == len(line) - 1:
-                        line = line[:i] + fb
-            fd = re.finditer(regex[key], line, re.I)
-            for o in fd:
+            for i in range(len(l)):
+                everypy = Cpy(l[i])[0]
+                keypy = Cpy(key)
+                if everypy in keypy:  # 替换同音字
+                    temp = key[keypy.index(everypy)]
+                    pychange[i] = [l[i], temp]
+                    l = l[:i] + temp + l[i + 1:]
+            bword2 = re.finditer(regex[key], l, re.I)  # 第二遍匹配其余正则
+            for o in bword2:
                 span = o.span()
                 match = o.group()
-                for tk in cw.keys():
-                    if span[0] <= tk < span[1]:
-                        cur = tk-span[0]
-                        if cur == 0:
-                            match = cw[tk][0] + match[cur + 1:]
-                        elif cur == len(match) - 1:
-                            match = match[:cur] + cw[tk][0]
-                        elif 0 < cur < len(match) - 1:
-                            match = match[:cur] + cw[tk][0] + match[cur + 1:]
+                for i in pychange.keys():
+                    if span[0] <= i < span[1]:
+                        temp = i-span[0]
+                        match = match[:temp] + pychange[i][0] + match[temp + 1:]  # 复原同音字
+                ans.append([lcount, key, match, span[0]])  # 将匹配结果保存
+        l = file.readline()
+        lcount += 1
+    return ans
 
-                ansList.append("Line{}: <{}> {}".format(cnt, key, match))
-                total += 1
-        line = file.readline()
-        cnt += 1
-    return total, ansList
-
-
-def test(words, org, ans):
-    forbiddenFileName = words
-    orgFileName = org
-    ansFileName = ans
-    chai = initChai()
-    regex = createRegex(chai, forbiddenFileName)
-    total, fbdList = matchForbidden(regex, orgFileName)
-    return fbdList
+def test(words, org):
+    wordsname = words
+    orgname = org
+    devide = initChai()
+    regex, cregex = BuildRegex(devide, wordsname)
+    anslist = Banwords(regex, cregex, orgname)
+    return anslist
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        forbiddenFileName = sys.argv[1]
-        orgFileName = sys.argv[2]
-        ansFileName = sys.argv[3]
+    starttime = time.time()
+    if len(sys.argv) == 4:
+        wordsname = sys.argv[1]
+        orgname = sys.argv[2]
+        ansname = sys.argv[3]
+    elif len(sys.argv) == 1:
+        wordsname = "words.txt"
+        orgname = "org.txt"
+        ansname = "ans.txt"
     else:
-        forbiddenFileName = "words.txt"
-        orgFileName = "org.txt"
-        ansFileName = "ans.txt"
-    chai = initChai()
-    regex = createRegex(chai, forbiddenFileName)
-    total, fbdList = matchForbidden(regex, orgFileName)
-    print("Total: {}".format(total))
-    for d in fbdList:
-        print(d)
+        print("输入错误!")
+        exit(0)
+    devide = myChai()
+    regex, cregex = BuildRegex(devide, wordsname)
+    anslist = Banwords(regex, cregex, orgname)
+    anslist.sort(key=lambda x: (x[0], x[3]))  # x[0]x[3]分别为行号和匹配时在行中的位置
+    with open(ansname, "w+", encoding="utf-8") as a:
+        a.write("Total: {}\n".format(len(anslist)))
+        for i in anslist:
+            a.write("Line{}: <{}> {}\n".format(i[0], i[1], i[2]))
+    endtime = time.time()
+    print(endtime - starttime)
+    #print("Total: {}".format(len(anslist)))
+    #for i in anslist:
+    #    print("Line{}: <{}> {}".format(i[0], i[1], i[2]))
